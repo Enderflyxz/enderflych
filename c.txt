@@ -1,0 +1,103 @@
+// ==UserScript==
+// @name         Auto Bypass + Reload Logic
+// @namespace    http://tampermonkey.net/
+// @version      11.0
+// @match        *://*/*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    let lastClick = 0;
+    let lastType = ''; // "get" hoặc "cont"
+
+    function canClick() {
+        return Date.now() - lastClick > 5000;
+    }
+
+    function forceClick(el, type) {
+        if (!el || !canClick()) return;
+
+        console.log('🔥 Click:', type, el);
+
+        // mở khóa
+        el.disabled = false;
+        el.removeAttribute('disabled');
+        el.style.display = 'block';
+        el.style.visibility = 'visible';
+        el.style.opacity = '1';
+        el.style.pointerEvents = 'auto';
+
+        // click
+        el.click();
+        el.dispatchEvent(new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true
+        }));
+
+        let parent = el.closest('a');
+        if (parent) parent.click();
+
+        lastClick = Date.now();
+        lastType = type;
+
+        // 💥 QUAN TRỌNG: reset lại sau khi click
+        setTimeout(() => {
+            console.log('♻️ Re-scan DOM...');
+            run(true); // ép chạy lại
+        }, 2000);
+    }
+
+    function isClickable(el) {
+        if (!el) return false;
+
+        let style = getComputedStyle(el);
+
+        return !(
+            el.disabled ||
+            style.pointerEvents === 'none' ||
+            style.opacity === '0'
+        );
+    }
+
+    function run(force = false) {
+        if (!canClick() && !force) return;
+
+        let getBtn = document.querySelector('#gi, #tp-snp2');
+        let contBtn = document.querySelector('#ci');
+
+        // 🔥 Nếu vừa click GET rồi → ưu tiên CONTINUE
+        if (lastType === 'get') {
+            if (isClickable(contBtn)) {
+                forceClick(contBtn, 'cont');
+                return;
+            }
+        }
+
+        // 🔥 Bình thường: GET trước
+        if (isClickable(getBtn)) {
+            forceClick(getBtn, 'get');
+            return;
+        }
+
+        // 👉 Sau đó CONTINUE
+        if (isClickable(contBtn)) {
+            forceClick(contBtn, 'cont');
+            return;
+        }
+    }
+
+    // theo dõi DOM
+    const observer = new MutationObserver(() => run());
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+
+    // chạy lần đầu
+    window.addEventListener('load', () => {
+        setTimeout(run, 2000);
+    });
+
+})();
